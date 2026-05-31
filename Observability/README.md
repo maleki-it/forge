@@ -147,6 +147,36 @@ kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80
 
 Open http://localhost:3000 — user `admin`, password from `values.yaml` (`grafana.adminPassword`, default `changeme`).
 
+### Import app dashboard
+
+A pre-built dashboard for the [App](../App/) NGINX metrics lives at [`dashboards/php-nginx-demo.json`](dashboards/php-nginx-demo.json).
+
+1. Port-forward Grafana (above).
+2. **Dashboards → New → Import → Upload JSON file** — select `Observability/dashboards/php-nginx-demo.json`.
+3. Select the Prometheus datasource → **Import**.
+
+Panels use metrics from both exporters:
+
+| Exporter | Metrics used |
+|----------|----------------|
+| nginx-prometheus-exporter | `nginx_up`, `nginx_http_requests_total`, `nginx_connections_*` |
+| nginx-log-exporter | `nginx_http_response_count_total`, `nginx_http_response_time_seconds_hist_*`, `nginx_http_upstream_time_seconds_hist_*`, `nginx_http_response_size_bytes` |
+
+**Response time panels** require `$request_time` and `$upstream_response_time` in the NGINX access log. The log line format must match **both**:
+
+- `App/k8s/03-nginx-configmap.yaml` — `log_format prometheus` + `access_log ... prometheus`
+- `App/k8s/09-nginx-log-exporter-configmap.yaml` — exporter `format:` string
+
+After changing either file, apply and restart NGINX (new pod clears the shared log volume and drops old `combined` lines):
+
+```bash
+kubectl apply -f App/k8s/03-nginx-configmap.yaml
+kubectl apply -f App/k8s/09-nginx-log-exporter-configmap.yaml
+kubectl rollout restart deployment/nginx -n php-nginx-demo
+```
+
+Verify: `nginx_parse_errors_total` should stop increasing; `curl` the app and check `/metrics` on the log exporter for `nginx_http_response_count_total`, `nginx_http_response_time_seconds_hist_bucket`, and `nginx_http_upstream_time_seconds_hist_bucket`.
+
 **Prometheus**
 
 ```bash
@@ -297,6 +327,7 @@ kubectl delete namespace monitoring
 | Master not scraped | node-exporter has tolerations for taints; etcd/scheduler rules are disabled in `values.yaml` |
 | Target DOWN | Check Service port **name** is `metrics`; endpoints not empty; pod serves `/metrics` |
 | Target missing | Confirm `serviceMonitorSelector` is `{}` (re-run `helm upgrade` with this repo’s `values.yaml`) |
+| `nginx_parse_errors_total` rising | NGINX `access_log` format must match log-exporter `format:` — see [Import app dashboard](#import-app-dashboard) |
 | Wrong Service selected | `ServiceMonitor.spec.selector.matchLabels` must match **Service** labels, not Deployment labels unless they are the same |
 
 ## Files
@@ -309,6 +340,7 @@ kubectl delete namespace monitoring
 | `values-pvc.yaml` | Optional 10 GiB PVC for Prometheus |
 | `examples/servicemonitor.yaml` | Generic ServiceMonitor + Service sample |
 | `examples/nginx-exporter-servicemonitor.yaml` | Demo app stub_status exporter |
+| `dashboards/php-nginx-demo.json` | Grafana dashboard for App NGINX metrics |
 | `scripts/pull-chart.sh` | Optional script to refresh the vendored chart |
 
 ## License

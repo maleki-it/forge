@@ -5,13 +5,19 @@ metadata:
   namespace: php-nginx-demo
 data:
   default.conf: |
+    # http context (conf.d is included from nginx.conf) — log_format must be here, not inside server {}
+    log_format prometheus '$remote_addr - $remote_user [$time_local] "$request" '
+                          '$status $body_bytes_sent "$http_referer" '
+                          '"$http_user_agent" $request_time $upstream_response_time';
+
     server {
         listen 80;
         server_name _;
         root /var/www/html;
         index index.php;
 
-        access_log /var/log/nginx/access.log combined;
+        # Must match nginx-log-exporter format in 09-nginx-log-exporter-configmap.yaml
+        access_log /var/log/nginx/access.log prometheus;
 
         location / {
             try_files $uri /index.php$is_args$args;

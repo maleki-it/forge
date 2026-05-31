@@ -1,4 +1,4 @@
-# forge
+# Forge
 
 End-to-end Kubernetes lab: provision a cluster, install observability, deploy a PHP + NGINX application with Prometheus metrics.
 
