@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alert-telegram-webhook
+  namespace: monitoring
+data:
+  TELEGRAM_BOT_TOKEN: "bottoken"
+  TELEGRAM_CHAT_ID: "chatid"
+  TELEGRAM_PARSE_MODE: "HTML"
+  WEBHOOK_PATH: "/webhook"
+  LISTEN_PORT: "8080"
+  # Placeholders: {status} {status_emoji} {receiver} {alertname} {severity}
+  # {namespace} {service} {summary} {description} {alert_count} {group_key}
+  # {starts_at} {ends_at} {generator_url}
+  MESSAGE_TEMPLATE: |
+    <b>{status_emoji} {status}</b> — {receiver}
+    <b>Alert:</b> {alertname}
+    <b>Severity:</b> {severity}
+    <b>Namespace:</b> {namespace}
+    <b>Summary:</b> {summary}
+    <b>Description:</b> {description}
+    <b>Alerts in group:</b> {alert_count}

@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alert-telegram-webhook
+  namespace: monitoring
+  labels:
+    app: alert-telegram-webhook
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alert-telegram-webhook
+  template:
+    metadata:
+      labels:
+        app: alert-telegram-webhook
+    spec:
+      containers:
+        - name: webhook
+          image: alimi1/alert-telegram-webhook:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: alert-telegram-webhook
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi

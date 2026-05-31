@@ -1,0 +1,93 @@
+# Prometheus alerting rules for php-nginx-demo
+# Requires: Observability stack with ruleSelector: {} (see Observability/values.yaml)
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: php-nginx-demo-alerts
+  namespace: php-nginx-demo
+  labels:
+    app: php-nginx-demo
+spec:
+  groups:
+    - name: php-nginx-demo
+      interval: 30s
+      rules:
+        - alert: NginxHigh5xxRate
+          expr: |
+            sum(rate(nginx_http_response_count_total{namespace="php-nginx-demo",status=~"5.."}[5m])) > 0.05
+          for: 2m
+          labels:
+            severity: warning
+            service: nginx
+          annotations:
+            summary: Elevated NGINX 5xx rate in php-nginx-demo
+            description: |
+              More than 0.05 5xx responses per second over 5m (sustained 2m).
+              Common cause: PHP-FPM unavailable (502) or gateway timeout (504).
+            runbook_url: https://github.com/maleki-it/forge/blob/main/SRE/runbooks/simulate-failure.md
+            dashboard_url: /d/forge-php-nginx-demo/php-nginx-demo
+
+        - alert: NginxHigh502Rate
+          expr: |
+            sum(rate(nginx_http_response_count_total{namespace="php-nginx-demo",status="502"}[5m])) > 0.01
+          for: 1m
+          labels:
+            severity: critical
+            service: nginx
+          annotations:
+            summary: NGINX returning 502 — upstream likely down
+            description: |
+              502 rate above 0.01/s. Check php-fpm pods and Service endpoints.
+            runbook_url: https://github.com/maleki-it/forge/blob/main/SRE/runbooks/simulate-failure.md
+
+        - alert: NginxStubStatusDown
+          expr: |
+            max(nginx_up{namespace="php-nginx-demo"}) == 0
+          for: 2m
+          labels:
+            severity: critical
+            service: nginx-exporter
+          annotations:
+            summary: NGINX stub_status scrape failing
+            description: |
+              nginx-prometheus-exporter cannot reach /nginx_status.
+              Check nginx pod, Service, and nginx-exporter deployment.
+
+        - alert: NginxLogParseErrors
+          expr: |
+            increase(nginx_parse_errors_total{namespace="php-nginx-demo"}[10m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            service: nginx-log-exporter
+          annotations:
+            summary: NGINX access log parse errors
+            description: |
+              Log lines do not match exporter format. Align log_format in
+              k8s/03-nginx-configmap.yaml with 09-nginx-log-exporter-configmap.yaml.
+
+        - alert: PhpFpmDeploymentNotReady
+          expr: |
+            kube_deployment_status_replicas_available{namespace="php-nginx-demo",deployment="php-fpm"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            service: php-fpm
+          annotations:
+            summary: No ready PHP-FPM replicas
+            description: |
+              php-fpm deployment has zero available replicas. NGINX will return 502 for PHP routes.
+
+        - alert: NginxHighUpstreamLatencyP95
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(nginx_http_upstream_time_seconds_hist_bucket{namespace="php-nginx-demo"}[5m]))
+            ) > 1
+          for: 5m
+          labels:
+            severity: warning
+            service: php-fpm
+          annotations:
+            summary: High p95 upstream latency (> 1s)
+            description: |
+              PHP-FPM responses slow. Check pod resources, pool size, and load.

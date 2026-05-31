@@ -2,7 +2,7 @@
 
 End-to-end Kubernetes lab: provision a cluster, install observability, deploy a PHP + NGINX application with Prometheus metrics.
 
-Three standalone modules — each with its own README, manifests, and architecture diagram.
+Four modules — each with its own README, manifests, and architecture diagram.
 
 ## Overview
 
@@ -47,6 +47,16 @@ flowchart TB
     Worker --> Observability
     Worker --> App
     SM -->|"scrape"| Prom
+
+    subgraph SRE["SRE — reliability"]
+        Fail["Failure simulation"]
+        Alert["PrometheusRule"]
+        PM["Postmortem"]
+        Fail --> Alert --> PM
+    end
+
+    Dev -->|"4. simulate & document"| SRE
+    Alert --> Prom
 ```
 
 ## Recommended order
@@ -56,6 +66,7 @@ flowchart TB
 | 1 | [Infra/](Infra/) | Provision Kubernetes on DigitalOcean (Vagrant + kubeadm) |
 | 2 | [Observability/](Observability/) | Install Prometheus, Grafana, and ServiceMonitor CRDs |
 | 3 | [App/](App/) | Build images, deploy PHP + NGINX, verify metrics |
+| 4 | [SRE/](SRE/) | Simulate failure, deploy alerts, write postmortem |
 
 ## Project READMEs
 
@@ -66,6 +77,7 @@ flowchart TB
 | **[App/README.md](App/README.md)** | Application architecture, design decisions, monitoring rationale |
 | **[App/steps/README.md](App/steps/README.md)** | Build images, deploy manifests, verify client IP and metrics |
 | **[App/tuning-readme.md](App/tuning-readme.md)** | PHP-FPM, NGINX, and Kubernetes resource sizing |
+| **[SRE/README.md](SRE/README.md)** | Failure simulation, alert strategy, blameless postmortem |
 
 ## What each layer covers
 
@@ -74,6 +86,7 @@ flowchart TB
 | **Infra** | DigitalOcean droplets, kubeadm, containerd, Flannel, private VPC join, kubeconfig |
 | **Observability** | Prometheus Operator, open ServiceMonitor selectors, resource limits / QoS |
 | **App** | PHP-FPM + NGINX, client IP via `X-Forwarded-For`, CDN proxy to origin, dual exporters (log sidecar + stub_status pod) |
+| **SRE** | Controlled 502 simulation, Prometheus alerts, Alertmanager, example postmortem |
 
 ## Live demo (CDN)
 
@@ -94,6 +107,10 @@ helm upgrade --install kube-prometheus-stack ./charts/kube-prometheus-stack \
 
 # 3 — Application (from App/, after images are built)
 kubectl apply -f k8s/
+
+# 4 — SRE (alerts + failure drill)
+kubectl apply -f SRE/alerts/php-nginx-demo-rules.yaml
+# see SRE/runbooks/simulate-failure.md
 ```
 
 Details, prerequisites, and troubleshooting live in each module README.

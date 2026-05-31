@@ -12,8 +12,9 @@ Helm values in this directory target lab-sized nodes (**2 CPU / 4 GiB RAM**) wit
 | Prometheus | Metrics storage and PromQL queries |
 | node-exporter | DaemonSet — node CPU, memory, disk, and network metrics |
 | kube-state-metrics | Metrics about Kubernetes objects (pods, deployments, nodes, …) |
-| Alertmanager | Alert routing (light footprint) |
+| Alertmanager | Alert routing — `warning` / `critical` → Telegram webhook |
 | Grafana | Dashboards (change the default admin password in `values.yaml`) |
+| [WebhookApp](WebhookApp/) | Receives Alertmanager webhooks and posts to Telegram |
 
 Chart version is pinned in [CHART_VERSION](CHART_VERSION). The chart is **vendored** under `charts/kube-prometheus-stack/` so installs work offline and stay reproducible.
 
@@ -25,6 +26,7 @@ flowchart TB
         SM["ServiceMonitor CR"]
         Svc["Service<br/>named port: metrics"]
         Exporter["Metrics endpoint<br/>/metrics"]
+        Rules["PrometheusRule<br/>SRE alerts"]
     end
 
     subgraph Monitoring["Namespace: monitoring"]
@@ -32,7 +34,12 @@ flowchart TB
         Prom["Prometheus"]
         Graf["Grafana"]
         AM["Alertmanager"]
+        WH["alert-telegram-webhook"]
         KSM["kube-state-metrics"]
+    end
+
+    subgraph External["External"]
+        TG["Telegram channel"]
     end
 
     subgraph Cluster["Every node"]
@@ -42,12 +49,15 @@ flowchart TB
     Helm["Helm install<br/>kube-prometheus-stack"] --> Monitoring
     SM --> Op
     Op -->|"generates scrape config"| Prom
+    Rules --> Prom
     Svc --> Prom
     Exporter --> Svc
     NE --> Prom
     KSM --> Prom
     Prom --> Graf
-    Prom --> AM
+    Prom -->|"evaluates rules"| AM
+    AM -->|"POST /webhook"| WH
+    WH -->|"sendMessage"| TG
 ```
 
 ### Metrics flow
@@ -55,7 +65,11 @@ flowchart TB
 1. **Helm** deploys the operator, Prometheus, Grafana, Alertmanager, node-exporter, and kube-state-metrics.
 2. **Application teams** apply a `ServiceMonitor` that selects a metrics `Service` by label.
 3. The **operator** watches `ServiceMonitor` CRs and updates Prometheus scrape targets — no manual `scrape_configs` edit.
-4. **Prometheus** scrapes app endpoints, node-exporter, and kube-state-metrics; Grafana and Alertmanager consume the same data store.
+4. **Prometheus** scrapes app endpoints, node-exporter, and kube-state-metrics; Grafana queries the same metrics store.
+5. **PrometheusRule** objects (e.g. in `SRE/alerts/`) define alert conditions; firing alerts go to **Alertmanager**.
+6. **Alertmanager** routes `warning` and `critical` alerts to [WebhookApp](WebhookApp/) (`POST /webhook`), which sends formatted messages to a **Telegram** channel.
+
+Alert routing is configured in `values.yaml` under `alertmanager.config`. See [WebhookApp/README.md](WebhookApp/README.md) for deploy and test steps.
 
 ## Why one stack instead of separate tools?
 
@@ -108,18 +122,22 @@ Rough memory budget (limits): Prometheus ~1 GiB, Grafana ~2 GiB (as configured),
 # 1. Create namespace
 kubectl create namespace monitoring
 
-# 2. Install from the vendored chart
-helm upgrade --install kube-prometheus-stack ./charts/kube-prometheus-stack \
+# 2. Install from the upstream chart (version pinned in CHART_VERSION)
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update prometheus-community
+helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
   --namespace monitoring \
   --values values.yaml \
+  --version 86.0.1 \
   --wait \
   --timeout 10m
 
 # Optional — persist metrics across pod restarts (requires StorageClass):
-# helm upgrade --install kube-prometheus-stack ./charts/kube-prometheus-stack \
+# helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
 #   --namespace monitoring \
 #   --values values.yaml \
 #   --values values-pvc.yaml \
+#   --version 86.0.1 \
 #   --wait \
 #   --timeout 10m
 ```
@@ -341,6 +359,7 @@ kubectl delete namespace monitoring
 | `examples/servicemonitor.yaml` | Generic ServiceMonitor + Service sample |
 | `examples/nginx-exporter-servicemonitor.yaml` | Demo app stub_status exporter |
 | `dashboards/php-nginx-demo.json` | Grafana dashboard for App NGINX metrics |
+| `WebhookApp/` | Alertmanager → Telegram webhook service |
 | `scripts/pull-chart.sh` | Optional script to refresh the vendored chart |
 
 ## License
