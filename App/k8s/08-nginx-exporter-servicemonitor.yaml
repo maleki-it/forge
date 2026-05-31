@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: nginx-exporter
+  namespace: php-nginx-demo
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: nginx-exporter
+  namespaceSelector:
+    matchNames:
+      - php-nginx-demo
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s

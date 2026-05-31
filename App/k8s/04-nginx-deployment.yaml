@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: php-nginx-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: alimi1/nginx-ip-demo:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+            - name: nginx-logs
+              mountPath: /var/log/nginx
+        - name: nginx-log-exporter
+          image: quay.io/martinhelmich/prometheus-nginxlog-exporter:v1
+          args:
+            - -config-file=/etc/nginxlog-exporter/config.yml
+          ports:
+            - name: log-metrics
+              containerPort: 4040
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: nginx-logs
+              mountPath: /var/log/nginx
+              readOnly: true
+            - name: nginx-log-exporter-config
+              mountPath: /etc/nginxlog-exporter
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-config
+        - name: nginx-logs
+          emptyDir: {}
+        - name: nginx-log-exporter-config
+          configMap:
+            name: nginx-log-exporter-config

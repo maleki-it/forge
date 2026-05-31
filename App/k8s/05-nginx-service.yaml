@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  namespace: php-nginx-demo
+spec:
+  type: LoadBalancer
+  # Bare-metal / VPS: no cloud LB → EXTERNAL-IP stays <pending>.
+  # Bind the worker node IP so http://<worker-ip>/ works (pods run on worker).
+  externalIPs:
+    - 206.81.0.98
+  externalTrafficPolicy: Local
+  selector:
+    app: nginx
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80

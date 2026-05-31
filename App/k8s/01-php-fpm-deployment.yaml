@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: php-fpm
+  namespace: php-nginx-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: php-fpm
+  template:
+    metadata:
+      labels:
+        app: php-fpm
+    spec:
+      containers:
+        - name: php-fpm
+          image: alimi1/php-fpm-ip-demo:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9000
