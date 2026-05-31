@@ -17,6 +17,46 @@ Helm values in this directory target lab-sized nodes (**2 CPU / 4 GiB RAM**) wit
 
 Chart version is pinned in [CHART_VERSION](CHART_VERSION). The chart is **vendored** under `charts/kube-prometheus-stack/` so installs work offline and stay reproducible.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph Apps["Application namespaces"]
+        SM["ServiceMonitor CR"]
+        Svc["Service<br/>named port: metrics"]
+        Exporter["Metrics endpoint<br/>/metrics"]
+    end
+
+    subgraph Monitoring["Namespace: monitoring"]
+        Op["Prometheus Operator"]
+        Prom["Prometheus"]
+        Graf["Grafana"]
+        AM["Alertmanager"]
+        KSM["kube-state-metrics"]
+    end
+
+    subgraph Cluster["Every node"]
+        NE["node-exporter<br/>DaemonSet"]
+    end
+
+    Helm["Helm install<br/>kube-prometheus-stack"] --> Monitoring
+    SM --> Op
+    Op -->|"generates scrape config"| Prom
+    Svc --> Prom
+    Exporter --> Svc
+    NE --> Prom
+    KSM --> Prom
+    Prom --> Graf
+    Prom --> AM
+```
+
+### Metrics flow
+
+1. **Helm** deploys the operator, Prometheus, Grafana, Alertmanager, node-exporter, and kube-state-metrics.
+2. **Application teams** apply a `ServiceMonitor` that selects a metrics `Service` by label.
+3. The **operator** watches `ServiceMonitor` CRs and updates Prometheus scrape targets — no manual `scrape_configs` edit.
+4. **Prometheus** scrapes app endpoints, node-exporter, and kube-state-metrics; Grafana and Alertmanager consume the same data store.
+
 ## Why one stack instead of separate tools?
 
 A common alternative is to run **Prometheus alone** and maintain a long `scrape_configs` file by hand. On Kubernetes that becomes fragile: every new app or port change needs a config reload.
@@ -27,7 +67,7 @@ This repo uses **kube-prometheus-stack** plus **ServiceMonitor** resources becau
 |-------|------|----------------|
 | Install & defaults | **kube-prometheus-stack** (Helm) | Deploys Prometheus, Grafana, Alertmanager, node-exporter, kube-state-metrics, and the operator in one maintained bundle |
 | Scrape discovery | **Prometheus Operator** | Watches `ServiceMonitor` CRDs and **generates** Prometheus config automatically |
-| Per-app contract | **ServiceMonitor** (your YAML) | Declares *which Service and port* to scrape — no Prometheus restart or Helm upgrade needed |
+| Per-app contract | **ServiceMonitor** (YAML manifest) | Declares *which Service and port* to scrape — no Prometheus restart or Helm upgrade needed |
 
 **ServiceMonitor is not a separate product** — it is a Kubernetes CRD installed by the operator. You write a small manifest in your app namespace; Prometheus picks it up.
 

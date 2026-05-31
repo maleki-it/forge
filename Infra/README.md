@@ -4,6 +4,41 @@ Provision a small Kubernetes cluster on [DigitalOcean](https://www.digitalocean.
 
 Configuration is driven by a local `.env` file: Kubernetes version, region, SSH key, and whether to create a separate worker node.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph Workstation
+        Env[".env config"]
+        Up["bin/up.sh"]
+        Kcfg["bin/kubeconfig.sh"]
+        Kubectl["kubectl"]
+    end
+
+    subgraph DigitalOcean
+        API[DigitalOcean API]
+        subgraph VPC["Private network"]
+            Master["k8s-master<br/>kubeadm control plane<br/>API :6443"]
+            Worker["k8s-worker<br/>application pods"]
+        end
+    end
+
+    Env --> Up
+    Up -->|vagrant up master| API
+    API --> Master
+    Up -->|common.sh + master.sh| Master
+    Up -->|vagrant up worker + join| Worker
+    Master -->|"kubeadm join (private 10.x)"| Worker
+    Kcfg -->|admin.conf + public IP| Kubectl
+    Kubectl -->|"HTTPS :6443 (public IP)"| Master
+```
+
+### Provision flow
+
+1. **`bin/up.sh`** — creates the master droplet, runs `common.sh` (containerd, kubeadm packages) and `master.sh` (`kubeadm init`, Flannel).
+2. **Worker** (when `WORKER_NODE=true`) — second droplet joins the cluster over the VPC private address.
+3. **`bin/kubeconfig.sh`** — copies admin credentials and rewrites the API server URL to the master **public** IP for access from outside the VPC.
+
 ## Features
 
 - One or two droplets (`s-2vcpu-4gb`: 2 vCPU, 4 GiB RAM each)
