@@ -35,7 +35,7 @@ Configuration is driven by a local `.env` file: Kubernetes version, region, SSH 
 
 The Vagrant DigitalOcean plugin expects:
 
-- Private key: e.g. `~/.ssh/id_rsa` (or `id_ed25519`)
+- Private key: e.g. `~/.ssh/id_rsa`
 - Public key: same path with `.pub` appended (e.g. `~/.ssh/id_rsa.pub`)
 
 Do **not** commit `.env` or API tokens to git.
