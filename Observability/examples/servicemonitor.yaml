@@ -1,0 +1,28 @@
+# Example: scrape an app that exposes Prometheus metrics on port "metrics"
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-metrics
+  namespace: default
+  labels:
+    app: demo-metrics
+spec:
+  selector:
+    app: demo-metrics
+  ports:
+    - name: metrics
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: demo-metrics
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: demo-metrics
+  endpoints:
+    - port: metrics
+      interval: 30s

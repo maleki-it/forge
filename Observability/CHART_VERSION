@@ -1,0 +1,4 @@
+chart=kube-prometheus-stack
+version=86.0.1
+appVersion=v0.91.0
+repo=https://prometheus-community.github.io/helm-charts

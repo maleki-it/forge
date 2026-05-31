@@ -1,0 +1,10 @@
+# Optional: persist Prometheus data (needs a StorageClass)
+prometheus:
+  prometheusSpec:
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
