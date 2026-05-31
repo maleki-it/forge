@@ -10,7 +10,7 @@ Designed to run on a small lab cluster (see [Infra](../Infra/) and [Observabilit
 |-------|----------------|
 | Web stack | NGINX terminates HTTP, forwards PHP via FastCGI to PHP-FPM |
 | Client IP | `X-Forwarded-For` + NGINX `real_ip` → JSON response from PHP |
-| Exposure | `LoadBalancer` Service + `externalIPs` for bare-metal / VPS clusters |
+| Exposure | `LoadBalancer` Service + `externalIPs`, or CDN proxy to worker IPv4 |
 | Metrics | NGINX stub_status exporter + access-log exporter sidecar |
 | Discovery | `ServiceMonitor` resources scraped by [kube-prometheus-stack](../Observability/) |
 
@@ -141,6 +141,92 @@ Proxies and load balancers append the original client to `X-Forwarded-For`. NGIN
 3. Passes the result to PHP as `REMOTE_ADDR` via FastCGI.
 
 PHP then reads `$_SERVER` and returns transparent JSON for verification.
+
+### CDN and proxy path
+
+The app is often exposed through a **CDN with proxy enabled**, not only via raw worker IP. DNS points at the CDN; the CDN forwards requests to the worker `externalIPs` address and sets `X-Forwarded-For`.
+
+```mermaid
+flowchart TB
+    Client["Client<br/>(browser / curl)"]
+
+    subgraph CDN["CDN — proxy enabled"]
+        CF["Cloudflare<br/>app.infradev.ir"]
+        Arvan["ArvanCloud<br/>app.planetdev.ir"]
+    end
+
+    Worker["Worker public IPv4<br/>k8s Service externalIPs"]
+    Nginx["NGINX<br/>real_ip + FastCGI"]
+    PHP["PHP-FPM<br/>JSON response"]
+
+    Client -->|"request + client IP"| CF
+    Client -->|"request + client IP"| Arvan
+    CF -->|"X-Forwarded-For: &lt;client&gt;<br/>TCP from CF edge"| Worker
+    Arvan -->|"X-Forwarded-For: &lt;client&gt;<br/>TCP from Arvan edge"| Worker
+    Worker --> Nginx --> PHP
+```
+
+**Header flow:**
+
+| Hop | What NGINX sees | Header |
+|-----|-----------------|--------|
+| Client → CDN | — | CDN records the client IP |
+| CDN → origin (worker) | TCP peer = **CDN edge IP** | `X-Forwarded-For: <client IP>` |
+| NGINX → PHP | `REMOTE_ADDR` after `real_ip` | `X-Forwarded-For` passed through |
+
+**JSON field meanings (CDN setup):**
+
+| Field | Typical value behind CDN |
+|-------|--------------------------|
+| `client_ip` | First address in `X-Forwarded-For` — the real client (or VPN exit) |
+| `remote_addr` | CDN **edge** IP that opened the connection to the origin |
+| `x_forwarded_for` | Raw header from the CDN (usually the client IP when proxy is on) |
+
+#### Live examples
+
+Two domains, same cluster origin (worker IPv4), different CDN providers:
+
+| Domain | CDN | Proxy |
+|--------|-----|-------|
+| `app.infradev.ir` | Cloudflare | enabled |
+| `app.planetdev.ir` | ArvanCloud | enabled |
+
+**VPN enabled** (exit IP `91.247.177.168`):
+
+```bash
+curl app.infradev.ir
+# client_ip:      91.247.177.168
+# remote_addr:    162.158.159.164   ← Cloudflare edge
+# x_forwarded_for: 91.247.177.168
+
+curl app.planetdev.ir
+# client_ip:      91.247.177.168
+# remote_addr:    185.215.232.192   ← ArvanCloud edge
+# x_forwarded_for: 91.247.177.168
+```
+
+**VPN disabled** (local ISP IP):
+
+```bash
+curl app.infradev.ir
+# client_ip:      31.171.101.11
+# remote_addr:    162.158.63.18     ← Cloudflare edge (different node)
+# x_forwarded_for: 31.171.101.11
+
+curl https://app.planetdev.ir
+# client_ip:      151.238.79.58
+# remote_addr:    94.101.182.11     ← ArvanCloud edge
+# x_forwarded_for: 151.238.79.58
+```
+
+**What this shows:**
+
+- `client_ip` tracks the **client (or VPN exit)** — changes when VPN toggles.
+- `remote_addr` is always a **CDN edge** address, not the home ISP IP.
+- Cloudflare and ArvanCloud use **different edge IP ranges** (`162.158.x` vs `185.215.x` / `94.101.x`).
+- With regional routing or filtering, traffic may reach the CDN on **different network paths**; `X-Forwarded-For` reflects whichever client IP the CDN saw for that request.
+
+Production should replace demo `set_real_ip_from 0.0.0.0/0` with [Cloudflare](https://www.cloudflare.com/ips/) and ArvanCloud published IP ranges only.
 
 ## Best practices
 

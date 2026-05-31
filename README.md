@@ -30,11 +30,12 @@ flowchart TB
 
     subgraph App["App — workload"]
         Client["HTTP client"]
+        CDN["CDN proxy<br/>Cloudflare / ArvanCloud"]
         Nginx["NGINX + log exporter"]
         PHP["PHP-FPM"]
         Stub["stub_status exporter"]
         SM["ServiceMonitors"]
-        Client --> Nginx --> PHP
+        Client --> CDN --> Nginx --> PHP
         Stub --> Nginx
         Nginx --> SM
         Stub --> SM
@@ -72,7 +73,13 @@ flowchart TB
 |-------|--------|
 | **Infra** | DigitalOcean droplets, kubeadm, containerd, Flannel, private VPC join, kubeconfig |
 | **Observability** | Prometheus Operator, open ServiceMonitor selectors, resource limits / QoS |
-| **App** | PHP-FPM + NGINX, client IP via `X-Forwarded-For`, bare-metal `externalIPs`, dual exporters (log sidecar + stub_status pod) |
+| **App** | PHP-FPM + NGINX, client IP via `X-Forwarded-For`, CDN proxy to origin, dual exporters (log sidecar + stub_status pod) |
+
+## Live demo (CDN)
+
+The deployed app responds on CDN-fronted domains with JSON showing `client_ip`, `remote_addr`, and `x_forwarded_for` — useful for verifying proxy headers through Cloudflare and ArvanCloud.
+
+See **[App/README.md — CDN and proxy path](App/README.md#cdn-and-proxy-path)** for architecture diagram, example `curl` output (VPN on/off), and field explanations.
 
 ## Quick links
 
