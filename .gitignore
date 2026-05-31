@@ -1,0 +1,14 @@
+# Never commit secrets
+.env
+*.pem
+*.key
+join-command.sh
+master-ip.txt
+master-private-ip.txt
+master-public-ip.txt
+# Vagrant local state
+.vagrant/
+*.log
+
+# OS
+.DS_Store
